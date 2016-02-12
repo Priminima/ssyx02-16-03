@@ -1,4 +1,9 @@
 *.class
+.idea/
+*/**/application.conf
+target
+project
+
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/

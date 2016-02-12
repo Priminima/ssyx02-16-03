@@ -1,3 +1,14 @@
+package sekvensa
+
+import akka.actor._
+import com.codemettle.reactivemq._
+import com.codemettle.reactivemq.ReActiveMQMessages._
+import com.codemettle.reactivemq.model._
+import com.typesafe.config.ConfigFactory
+import org.json4s._
+import org.json4s.native.Serialization
+import org.json4s.native.Serialization.{read, write}
+import com.github.nscala_time.time.Imports._
 /**
   * Created by elin on 2016-02-12.
   */
@@ -14,7 +25,7 @@ class Patient extends Actor {
 
   // The state
   var theBus: Option[ActorRef] = None
-  var currentState: List[ElvisPatient] = List()
+  var currentState: List[sekvensa.service.ElvisPatient] = List()
 
 
   def receive = {
@@ -32,7 +43,7 @@ class Patient extends Actor {
     case ConnectionFailed(request, reason) => {
       println("failed:" + reason)
     }
-    case mess@AMQMessage(body, prop, headers) => {
+    case mess @ AMQMessage(body, prop, headers) => {
     }
   }
 }
