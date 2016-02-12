@@ -44,6 +44,7 @@ class Patient extends Actor {
       println("failed:" + reason)
     }
     case mess @ AMQMessage(body, prop, headers) => {
+      println(body)
     }
   }
 }
