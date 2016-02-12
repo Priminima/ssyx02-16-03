@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ssyx02-16-03.iml" filepath="$PROJECT_DIR$/.idea/modules/ssyx02-16-03.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ssyx02-16-03-build.iml" filepath="$PROJECT_DIR$/.idea/modules/ssyx02-16-03-build.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../TransformationService/.idea/modules/transformationservice.iml" filepath="$PROJECT_DIR$/../TransformationService/.idea/modules/transformationservice.iml" />
+      <module fileurl="file://$PROJECT_DIR$/../TransformationService/.idea/modules/transformationservice-build.iml" filepath="$PROJECT_DIR$/../TransformationService/.idea/modules/transformationservice-build.iml" />
+    </modules>
+  </component>
+</project>
