@@ -9,7 +9,7 @@ Börja jobba:
 3. git add //flera kanske
 4. git commit -m "meddelanden"
 (4.) git commit --amend //mergar commitet med det förra(bara innan man pushar)
-5. git pull --rebase// 
+5. git pull --rebase//
 6. git push //när man är nöjd
 
 
@@ -22,10 +22,10 @@ FEL/ANNAT sätt att jobba på:
 3.git checkout -b myTask    // Create and switch to branch myTask
 4.Optional: Use git branch -a to show all branches and git status to see what branch you're on.
 5.Do some coding (some well defined (sub) task), after max 30 min. … go to 6.
-6.git add newFile x antal filer du har 
+6.git add newFile x antal filer du har
 7.git commit -m "blablabla"   // Commit on branch myTask (use better message)
 8.Goto 5. until task finished (max 2 hours before next point)
-9.Ok, assume task finished. Project should be executable, all test should pass.  
+9.Ok, assume task finished. Project should be executable, all test should pass.
 10.Now we start to integrate our changes into the project (Tip: zip current code)
 	a.git checkout master
 	b.git pull --rebase                            // Update local master again
