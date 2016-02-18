@@ -49,6 +49,7 @@ class Patient extends Actor {
       println("failed:" + reason)
     }
     case mess @ AMQMessage(body, prop, headers) => {
+<<<<<<< HEAD
 
       //println("body:   " + body)
       //println("prop:   " + prop)
@@ -56,6 +57,9 @@ class Patient extends Actor {
 
       searcher.postEventToElastic(body.toString)
 
+=======
+      println(body)
+>>>>>>> 65b218818905f603295e2afbeb6f740a1053903f
     }
   }
 }
