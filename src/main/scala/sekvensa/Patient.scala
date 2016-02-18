@@ -26,7 +26,7 @@ class Patient extends Actor {
   val pass = config.getString("sp.activemq.pass")
   val readFrom = config.getString("sp.simpleservice.readFromTopic")
   val writeTo = config.getString("sp.simpleservice.writeToTopic")
-  
+
   val searcher = new Searcher
 
   //The state
@@ -48,8 +48,12 @@ class Patient extends Actor {
       println("failed:" + reason)
     }
     case mess @ AMQMessage(body, prop, headers) => {
-      searcher.postEventToElastic(body.toString)
+      searcher.postJsonToElastic(body.toString)
+      /*
       println(body)
+      println(prop)
+      println(headers)
+      */
     }
   }
 }
