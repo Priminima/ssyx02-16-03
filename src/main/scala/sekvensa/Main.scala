@@ -13,7 +13,6 @@ object Main extends App {
   implicit val executor = system.dispatcher
   implicit val materializer = ActorMaterializer()
   val logger = Logging(system, "SimpleService")
-
   val transformActor = system.actorOf(sekvensa.Patient.props)
   transformActor ! "connect"
 
