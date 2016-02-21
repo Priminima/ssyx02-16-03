@@ -138,12 +138,14 @@ class Searcher {
       "ReasonForVisit" ->              updates.get("ReasonForVisit"),
       "Team" ->                        updates.get("Team"),
       "VisitId" ->                     updates.get("VisitId"),
-      "VisitRegistrationTime" ->       updates.get("VisitRegistrationTime")
+      "VisitRegistrationTime" ->       updates.get("VisitRegistrationTime"),
+      "Timestamp" ->                   updates.get("timestamp")
     ).filter(nones => nones._2.isDefined)
   }
 
   def addUpdatesToList(patient: ElvisPatient, news: Map[String, Option[JValue]] ): List[ElvisUpdateEvent]= {
     //TODO block insertion of identical updates
+
     val relevantKeys = List("DepartmentComment", "Location", "ReasonForVisit", "Team")
     var updatedVariables: List[ElvisUpdateEvent] = patient.Updates
     relevantKeys.foreach( k =>
@@ -156,12 +158,13 @@ class Searcher {
                 "CareContactId"-> patient.CareContactId,
                 "VisitId" -> patient.VisitId,
                 "PatientId" -> patient.PatientId,
-                "Timestamp"-> getNow,
-                k -> news.get(k).get
+                "Timestamp"-> news.get("Timestamp").get.get.values,
+                "ModifiedField" -> k,
+                "ModifiedTo" -> news.get(k).get.get.values
               )
             )
           )
-        )
+        ).filter(k => !updatedVariables.contains(k))
       }
     )
     updatedVariables

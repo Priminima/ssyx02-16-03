@@ -31,7 +31,9 @@ case class ElvisEvent(CareEventId: BigInt,
 case class ElvisUpdateEvent(CareContactId: BigInt,
                        PatientId: BigInt,
                        VisitId: BigInt,
-                       Timestamp: DateTime  //not shown: actual update. [location, team, etc]
+                       Timestamp: DateTime ,
+                       ModifiedField: String,
+                       ModifiedTo : JValue
                       )
 
 
