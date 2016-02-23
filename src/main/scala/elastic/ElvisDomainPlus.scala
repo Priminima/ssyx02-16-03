@@ -3,7 +3,7 @@ package elastic
 import com.github.nscala_time.time.Imports._
 import org.json4s._
 
-case class ElvisPatient(CareContactId: BigInt,
+case class ElvisPatientPlus(CareContactId: BigInt,
                         CareContactRegistrationTime: DateTime,
                         DepartmentComment: String,
                         Location: String,
@@ -39,6 +39,6 @@ case class ElvisUpdateEvent(CareContactId: BigInt,
 
 
 case class ElvisPatientDiff(updates: Map[String, JValue], newEvents: List[ElvisEvent], removedEvents: List[ElvisEvent])
-case class NewPatient(timestamp: DateTime, patient: ElvisPatient)
-case class RemovedPatient(timestamp: DateTime, patient: ElvisPatient)
-case class SnapShot(patients: List[ElvisPatient])
+case class NewPatient(timestamp: DateTime, patient: ElvisPatientPlus)
+case class RemovedPatient(timestamp: DateTime, patient: ElvisPatientPlus)
+case class SnapShot(patients: List[ElvisPatientPlus])
