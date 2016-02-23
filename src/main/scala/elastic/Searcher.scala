@@ -93,33 +93,24 @@ class Searcher {
     // retrieve the patient from elastic
     val oldPatientQuery = client.get(INDEX, ON_GOING_PATIENT_TYPE, careContactId).map(_.getResponseBody) //fetch patient from database
     while (!oldPatientQuery.isCompleted) {} // the worst possible way to wait for a response from the database. //TODO add timeout (like a coward)
+    val oldPatient = parse(oldPatientQuery.value.get.get) // I have a feeling this is not considered best practise
+    val oldPatientData = write(oldPatient \ "_source") // The good stuff is located in _source.
+    val elvisPatient:ElvisPatientPlus  = read[ElvisPatientPlus](oldPatientData) // finally, parse to ElvisPatient
     println("i asked for patient " + careContactId + " and received response:  \n    " + oldPatientQuery.value)
-    val oldPatient = parse(oldPatientQuery.value.get.get) // wow.
-   // println("oldPatient: " + oldPatient)
-    val elvisPatient:ElvisPatientPlus  = read[ElvisPatientPlus](write(oldPatient \ "_source")) // finally, parse to ElvisPatient. The good stuff is located in _source. Hopefully no one will see i called read(write())
 
     // add and remove events from event array
     val actualNewEvents = elvisDiff.newEvents.filter(e => !elvisPatient.Events.contains(e))       // filter out Events from newEvents
     val actualOldEvents = elvisPatient.Events.filter(e => !elvisDiff.removedEvents.contains(e))   // filter out removedEvents from Events
     val events : List[ElvisEvent] = actualNewEvents ++ actualOldEvents                            // add newEvents to list of Events
 
-    //println("Events: " + events)
-    println(  "SUPER DEBUG GO")
-    println(  elvisDiff.newEvents)
-    println(  elvisPatient.Events)
-    println(  elvisDiff.removedEvents)
-    println(  actualNewEvents)
-    println(  actualOldEvents)
-    println(  events)
-
     // create elvisUpdateEvents
     val updates = updateExtractor(elvisDiff.updates)
     val updateEventList = addUpdatesToList(elvisPatient, updates)
 
     // create priority
-    //val priority = elvisPatient.Priority
-    //TODO add priority
-    //TODO also check actualNewEvents for a new priority
+    // val priority = elvisPatient.Priority
+    // TODO add priority
+    // TODO also check actualNewEvents for a new priority
 
     // now rebuild the patient
     val newPatient = new ElvisPatientPlus( //TODO cleanse this abomination
@@ -138,13 +129,34 @@ class Searcher {
       Updates =                     updateEventList
     )
 
-    client.index(
-      index = INDEX,
-      `type` = ON_GOING_PATIENT_TYPE,
-      id = Some(careContactId),
-      data = write(newPatient),
-      refresh = true
-    )
+    // Finally, check if the patient has received a "klar" Event. If it has, reindex it to the pile of finished patients. Otherwise, put it back into elastic
+
+    val patientFinished = events.filter(e => e.Value.equals("Klar"))
+    if(patientFinished.isEmpty){
+      // Move patient to ON_GOING_PATIENT_TYPE
+      client.index(
+        index = INDEX,
+        `type` = ON_GOING_PATIENT_TYPE,
+        id = Some(careContactId),
+        data = write(newPatient),
+        refresh = true
+      )
+    }else{
+      // Move patient to FINISHED_PATIENT_TYPE
+      client.index(
+        index = INDEX,
+        `type` = FINISHED_PATIENT_TYPE,
+        id = Some(careContactId),
+        data = write(newPatient),
+        refresh = true
+      )
+      // Delete patient from ON_GOING_PATIENTS
+      client.delete(
+        index = INDEX,
+        `type` = FINISHED_PATIENT_TYPE,
+        id = careContactId
+      )
+    }
   }
 
   def updateExtractor(updates: Map[String, JValue]): Map[String, Option[JValue]] = {
