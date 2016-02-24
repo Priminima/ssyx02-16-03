@@ -5,13 +5,11 @@ import com.codemettle.reactivemq._
 import com.codemettle.reactivemq.ReActiveMQMessages._
 import com.codemettle.reactivemq.model._
 import com.typesafe.config.ConfigFactory
-import elastic.Searcher
-import org.json4s._
-import org.json4s.native.Serialization
-import org.json4s.native.Serialization.{read, write}
-import com.github.nscala_time.time.Imports._
+import elastic.PatientsToElastic
+//import org.json4s.native.Serialization.{read, write}
+//import com.github.nscala_time.time.Imports._
 
-import scala.util.parsing.json.JSON
+//import scala.util.parsing.json.JSON
 
 /**
   * Created by elin on 2016-02-12.
@@ -27,7 +25,7 @@ class Patient extends Actor {
   val readFrom = config.getString("sp.simpleservice.readFromTopic")
   val writeTo = config.getString("sp.simpleservice.writeToTopic")
 
-  val searcher = new Searcher
+  val patientsToElastic = new PatientsToElastic
 
   //The state
   var theBus: Option[ActorRef] = None
@@ -48,12 +46,7 @@ class Patient extends Actor {
       println("failed:" + reason)
     }
     case mess @ AMQMessage(body, prop, headers) => {
-      searcher.postJsonToElastic(body.toString)
-      /*
-      println(body)
-      println(prop)
-      println(headers)
-      */
+      patientsToElastic.messageReceived(body.toString) // send only the interesting part, the body
     }
   }
 }
