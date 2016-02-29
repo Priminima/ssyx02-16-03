@@ -3,20 +3,26 @@ package elastic
 import com.github.nscala_time.time.Imports._
 import org.json4s._
 
-//TODO decide whether or not Priority should be added as a field
 case class ElvisPatientPlus(
   CareContactId: BigInt,
-  CareContactRegistrationTime: DateTime,
   DepartmentComment: String,
   Location: String,
   PatientId: BigInt,
   ReasonForVisit: String,
   Team: String,
   VisitId: BigInt,
+  CareContactRegistrationTime: DateTime,
   VisitRegistrationTime: DateTime,
-  //Priority: String              // Commented because it might be a bad idea. Priority is also an ElvisEvent type
+  // These are not included in data sent by TransformationService so they are initialized here
+  RemovedTime: DateTime = DateTime.parse("0000-01-24T00:00:00Z"),
+  TimeToDoctor: BigInt = -1,
+  TimeToTriage: BigInt = -1,
+  TotalTime:    BigInt = -1,
+  Priority: String = "",
+
+  // arrays
   Events: List[ElvisEvent],
-  Updates: List[ElvisUpdateEvent] // this is the plus part
+  Updates: List[ElvisUpdateEvent]
 )
 
 case class ElvisEvent(
