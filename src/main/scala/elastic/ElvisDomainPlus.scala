@@ -14,7 +14,7 @@ case class ElvisPatientPlus(
   CareContactRegistrationTime: DateTime,
   VisitRegistrationTime: DateTime,
   // These are not included in data sent by TransformationService so they are initialized here
-  RemovedTime: DateTime = DateTime.parse("0000-01-24T00:00:00Z"),
+  RemovedTime: Option[DateTime],
   TimeToDoctor: BigInt = -1,
   TimeToTriage: BigInt = -1,
   TotalTime:    BigInt = -1,
@@ -24,6 +24,7 @@ case class ElvisPatientPlus(
   Events: List[ElvisEvent],
   Updates: List[ElvisUpdateEvent]
 )
+
 
 case class ElvisEvent(
   CareEventId: BigInt,
