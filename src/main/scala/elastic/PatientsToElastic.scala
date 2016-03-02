@@ -1,12 +1,15 @@
 package elastic
 
+import javax.swing.JList
+
 import com.github.nscala_time.time.Imports._
 import com.typesafe.config.ConfigFactory
 import wabisabi._
 import org.json4s.native.JsonMethods._
+import org.json4s.native.Serialization._
 import org.json4s._
-import org.json4s.native.Serialization.{read, write}
-import scala.concurrent.ExecutionContext.Implicits.global
+import org.json4s.JsonDSL._
+import scala.concurrent.ExecutionContext.Implicits.global // Client.get gets sad without this
 
 class PatientsToElastic {
   implicit val formats = org.json4s.DefaultFormats ++ org.json4s.ext.JodaTimeSerializers.all // json4s needs this for something
@@ -45,48 +48,56 @@ class PatientsToElastic {
 
   /** Instantiates a patient and sends it to ONGOING_PATIENT_INDEX
     *
-    * @param patientString patient to send to elastic
+    * @param data patient to send to elastic
     */
-  def postEntirePatientToElastic(patient: JValue): Unit = {
- //   val json:JValue = parse(patientString) // generate a json map
+  def postEntirePatientToElastic(data: JValue): Unit = {
+    val patient = data \ "data" \"patient"
+    //   val json:JValue = parse(patientString) // generate a json map
 //    val patient:String = write(json \ "data" \ "patient") // dig out the good stuff from the json map
   //  val elvisPatient:ElvisPatientPlus = read[ElvisPatientPlus](patient) //create an ElvisPatient from the good stuff
 
     //TODO do analytics TTT TTD TTF ETC
-      addPatient(patient, ONGOING_PATIENT_INDEX) // index the new patient
+    addPatient(patient, ONGOING_PATIENT_INDEX) // index the new patient
   }
 
   /** Applies a diff to an OnGoingPatient.
     *
     * The incoming diff is parsed and the CareContactId of the diff is extracted. the relevant patient is fetched from
     * the database using the CareContactId. The next iteration of the patient is generated from the diff and the old
-    * patient. The new patient is then indexed into the database, overwritning the old version
-    *
-    * @param diffString a json string describing the patient diff. It should be a String with "isa"->"diff"
+    * patient. The new patient is then indexed into the database, overwriting the old version
     */
-  def diffPatient(diffString: String) {
-    // parse the string to an ElvisPatientDiff
-    val json:JValue = parse(diffString)
-    val diff:String = write(json \ "data")
-    val elvisDiff: ElvisPatientDiff  = read[ElvisPatientDiff](diff)
-
-    // extract CareContactId (needed to fetch patient from elasticsearch)
-    val careContactId:String = elvisDiff.updates.get("CareContactId").get.values.toString // updates is still a map, which gives us this interesting line
+  def diffPatient(data: JValue) {
+    val diff = data \ "data"
+    // extract CareContactId and fetch patient from elasticsearch
+    val careContactId:String = ( diff \ "updates" \ "CareContactId" ).values.toString // updates is still a map, which gives us this interesting line
     println("CareContactId: " + careContactId)
-
-    // retrieve the patient from elastic
-    val elvisPatient = getPatientFromElastic(ONGOING_PATIENT_INDEX, careContactId)
+    val patient:JValue = getPatientFromElastic(ONGOING_PATIENT_INDEX, careContactId)
 
     // add and remove Events from event array
-    val actualNewEvents = elvisDiff.newEvents.filter(e => !elvisPatient.Events.contains(e))       // filter out Events from newEvents (do not add an Event that has already happened)
-    val actualOldEvents = elvisPatient.Events.filter(e => !elvisDiff.removedEvents.contains(e))   // filter out removedEvents from Events
-    val events = actualOldEvents ++ actualNewEvents
+    val oldEvents:      List[ElvisEvent] = castJValueToList[ElvisEvent](patient \ "Events")
+    val newEvents:      List[ElvisEvent] = castJValueToList[ElvisEvent](diff \ "newEvents")
+    val removedEvents:  List[ElvisEvent] = castJValueToList[ElvisEvent](diff \ "removedEvents")
+    println(oldEvents)
+    println(newEvents)
+    println(removedEvents)
+    println(patient\ "Events")
+    println(diff \ "newEvents")
+    println(diff \ "removedEvents")
+
+   // val actualNewEvents:List[ElvisEvent] = newEvents.filter(e => !oldEvents.contains(e))       // filter out Events from newEvents (do not add an Event that has already happened)
+   // val actualOldEvents:List[ElvisEvent] = oldEvents.filter(e => !removedEvents.contains(e))   // filter out removedEvents from Events
+    val actualNewEvents:List[ElvisEvent] = newEvents
+    val actualOldEvents:List[ElvisEvent] = oldEvents
+
+    val events:List[ElvisEvent] = actualOldEvents ++ actualNewEvents
+    // fuck.
 
     // create elvisUpdateEvents
-    val updates:List[ElvisUpdateEvent] = createNewUpdateList(elvisPatient, elvisDiff.updates)
+    val updates:List[ElvisUpdateEvent] = createNewUpdateList(patient, diff \ "updates")
 
     // create field Data
-    val fieldData = updateFields(elvisPatient, elvisDiff.updates)
+    // val fieldData = updateFields(elvisPatient, elvisDiff.updates)
+    val fieldData = patient merge (diff \ "updates")
 
     // now rebuild the patient
     val newPatient = elvisPatientFactory(fieldData, events, updates)
@@ -95,46 +106,18 @@ class PatientsToElastic {
     addPatient(newPatient, ONGOING_PATIENT_INDEX)
   }
 
-  def updateFields(patient: ElvisPatientPlus, newValues:Map[String, Any]): Map[String, Any] ={
-    Map[String, Any](
-      "CareContactId"->                  updateOrElse(newValues.get("CareContactId"), patient.CareContactId),
-      "CareContactRegistrationTime" ->   updateOrElse(newValues.get("CareContactRegistrationTime"), patient.CareContactRegistrationTime),
-      "DepartmentComment"->              updateOrElse(newValues.get("DepartmentComment"), patient.DepartmentComment),
-      "Location"->                       updateOrElse(newValues.get("Location"), patient.Location),
-      "PatientId"->                      updateOrElse(newValues.get("PatientId"), patient.PatientId),
-      "ReasonForVisit"->                 updateOrElse(newValues.get("ReasonForVisit"), patient.ReasonForVisit),
-      "Team"->                           updateOrElse(newValues.get("Team"), patient.Team),
-      "VisitId"->                        updateOrElse(newValues.get("VisitId"), patient.VisitId),
-      "VisitRegistrationTime"->          updateOrElse(newValues.get("VisitRegistrationTime"), patient.VisitRegistrationTime),
-
-      "RemovedTime" ->                   updateOrElse(newValues.get("RemovedTime"), patient.RemovedTime),
-      "TimeToDoctor" ->                  updateOrElse(newValues.get("TimeToDoctor"), patient.TimeToDoctor),
-      "TimeToTriage" ->                  updateOrElse(newValues.get("TimeToTriage"), patient.TimeToTriage),
-      "TotalTime" ->                     updateOrElse(newValues.get("TotalTime"), patient.TotalTime),
-      "Priority" ->                      updateOrElse(newValues.get("Priority"), patient.Priority)
-    )
+  def castJValueToList[A](list:JValue): List[A] = {
+    list match {
+      case JNothing => List[A]()
+      case _ => list.asInstanceOf[JArray].values.asInstanceOf[List[A]]
+    }
   }
 
-  def elvisPatientFactory(fieldData: Map[String, Any], events: List[ElvisEvent], updates: List[ElvisUpdateEvent]): ElvisPatientPlus ={ //TODO look at style guide and decide if this maybe should be a constructor. i mean, it is literally a constructor. Stop this nonsense this should be a constructor
-    new ElvisPatientPlus(
-      CareContactId =               fieldData.get("CareContactId").get.asInstanceOf[BigInt],
-      CareContactRegistrationTime = fieldData.get("CareContactRegistrationTime").get.asInstanceOf[DateTime],
-      DepartmentComment =           fieldData.get("DepartmentComment").get.asInstanceOf[String],
-      Location =                    fieldData.get("Location").get.asInstanceOf[String],
-      PatientId =                   fieldData.get("PatientId").get.asInstanceOf[BigInt],
-      ReasonForVisit =              fieldData.get("ReasonForVisit").get.asInstanceOf[String],
-      Team =                        fieldData.get("Team").get.asInstanceOf[String],
-      VisitId =                     fieldData.get("VisitId").get.asInstanceOf[BigInt],
-      VisitRegistrationTime =       fieldData.get("VisitRegistrationTime").get.asInstanceOf[DateTime],
-
-      RemovedTime =                 fieldData.get("RemovedTime").get.asInstanceOf[Option[DateTime]],
-      TimeToDoctor =                getTimeToDoctor(events, fieldData.get("VisitRegistrationTime").get.asInstanceOf[DateTime] ),
-      TimeToTriage =                getTimeToTriage(events, fieldData.get("VisitRegistrationTime").get.asInstanceOf[DateTime] ),
-      TotalTime  =                  getTotalTime(fieldData.get("RemovedTime").get.asInstanceOf[Option[DateTime]], fieldData.get("VisitRegistrationTime").get.asInstanceOf[DateTime] ),
-      Priority =                    getPriority(events),
-
-      Events =                      events,
-      Updates =                     updates
+  def elvisPatientFactory(fieldData: JValue, events: List[ElvisEvent], updates: List[ElvisUpdateEvent]): JValue = {
+    fieldData merge
+    (
+      ("Events" -> parse(write(events))) ~
+      ("Updates" ->  parse(write(updates)) )
     )
   }
 
@@ -185,22 +168,25 @@ class PatientsToElastic {
     * @param newUpdates a map of the new updates
     * @return new ElvisUpdateEvent list
     */
-  def createNewUpdateList(patient: ElvisPatientPlus, newUpdates: Map[String, JValue] ): List[ElvisUpdateEvent]= {
+  def createNewUpdateList(patient: JValue, newUpdates: JValue ): List[ElvisUpdateEvent]= {
     val relevantKeys = List("DepartmentComment", "Location", "ReasonForVisit", "Team") // the four keys which interest us
-    var updatedVariables: List[ElvisUpdateEvent] = patient.Updates  // make a mutable list and fill it with the current list of updates
+    var updatedVariables: List[ElvisUpdateEvent] = castJValueToList[ElvisUpdateEvent](patient \ "updates")  // make a mutable list and fill it with the current list of updates
+ //TODO double check if still works
+    println("o hai: " + newUpdates)
+    relevantKeys.foreach( k => if(newUpdates \ k != JNothing){ // foreach relevant key, check if newUpdates has an associated value
 
-    relevantKeys.foreach( k => if(newUpdates.getOrElse(k, JNothing) != JNothing){ // foreach relevant key, check if newUpdates has an associated value
-      println("update recorded: " +k+ "->" +newUpdates.get(k).get.values)
+      println("update recorded: " +k+ "->" +(newUpdates \ k).values)
       updatedVariables ++= List(
         read[ElvisUpdateEvent](write(Map( // ElvisUpdateEvent made from String made from Map
-          "CareContactId"-> patient.CareContactId,
-          "VisitId" -> patient.VisitId,
-          "PatientId" -> patient.PatientId,
-          "Timestamp"-> newUpdates.get("timestamp").get.values, // please note timestamp vs Timestamp
+          "CareContactId"-> patient \ "CareContactId",
+          "VisitId" -> patient\"VisitId",
+          "PatientId" -> patient\"PatientId",
+          "Timestamp"-> (newUpdates\"timestamp").values, // please note timestamp vs Timestamp
           "ModifiedField" -> k,                         // the key for the field that was changed...
-          "ModifiedTo" -> newUpdates.get(k).get.values  // ...and the value it was changed to
+          "ModifiedTo" -> (newUpdates\k).values  // ...and the value it was changed to
         )))).filter(k => !updatedVariables.contains(k)) // filter out any update that has already been recorded. This filter is called on a list that contains one element.
     })
+
     updatedVariables
   }
 
@@ -214,20 +200,19 @@ class PatientsToElastic {
 
   /** Deletes a patient from ONGOING_PATIENT_INDEX and adds it to FINISHED_PATIENT_INDEX
     *
-    * @param patientString the patient to be removed (as a JSON String)
+    * @param patient the patient to be removed (as a JSON)
     */
-  def removePatient(patientString: String) {
-    val patient:JValue = parse(patientString) // gererate a json map
-
+  def removePatient(patient: JValue) {
     // create field Data
-    val removed = Map[String,Any]("RemovedTime"->getNow)
-    val fieldData = updateFields(patient, removed)
+    /* //TODO set removed time
+    val removed = "RemovedTime"->getNow
+    val fieldData = modifyFields(patient, removed)
     // now rebuild the patient
-    val newPatient = elvisPatientFactory(fieldData, elvisPatient.Events, elvisPatient.Updates)
-
+    val newPatient = elvisPatientFactory(fieldData, patient \ "Events", patient \ "Updates")
+*/
     // delete patient from ongoing and send to finished patients
     deletePatient(patient, ONGOING_PATIENT_INDEX)
-    addPatient(newPatient, FINISHED_PATIENT_INDEX)
+    addPatient(patient, FINISHED_PATIENT_INDEX)
   }
 
   /** Attempts to delete a patient from elasticsearch under /targetIndex/PATIENT_TYPE/patient.CareContactId
@@ -235,8 +220,8 @@ class PatientsToElastic {
     * @param patient the patient to be removed, in the ElvisPatientPlus format
     * @param targetIndex should ONLY be one of the values ONGOING_PATIENT_INDEX or FINISHED_PATIENT_INDEX
     */
-  def deletePatient(patient : JValue, targetIndex: String): Unit ={
-    val careContactId:String = (patient \ "CareContactId").toString
+  def deletePatient(patient : JValue, targetIndex: String): Unit = {
+    val careContactId:String = (patient \ "CareContactId").values.toString
     client.delete(
       index = targetIndex,
       `type` = PATIENT_TYPE,
@@ -251,12 +236,12 @@ class PatientsToElastic {
     * @param targetIndex should ONLY be one of the values ONGOING_PATIENT_INDEX or FINISHED_PATIENT_INDEX
     */
   def addPatient(patient : JValue, targetIndex: String): Unit = {
-    val careContactId:String = (patient \ "CareContactId").toString
+    val careContactId:String = (patient \ "CareContactId").values.toString
     client.index(
       index = targetIndex,
       `type` = PATIENT_TYPE,
       id = Some(careContactId),
-      data = patient.toString,
+      data = write(patient),
       refresh = true
     )
   }
@@ -266,6 +251,8 @@ class PatientsToElastic {
     val oldPatientQuery = client.get(index, PATIENT_TYPE, careContactId).map(_.getResponseBody) //fetch patient from database
     while (!oldPatientQuery.isCompleted) {} // patiently wait for response from the database. //TODO at some point add timeout. It could get stuck here forever (but probably not)
     val oldPatient:JValue = parse(oldPatientQuery.value.get.get) // unpack the string and cast to json-map
+
+    println("patient gotted: " +oldPatient \ "_source")
     return oldPatient \ "_source" // The good stuff is located in _source.
   }
 
@@ -273,5 +260,3 @@ class PatientsToElastic {
     DateTime.now(DateTimeZone.forID("Europe/Stockholm"))
   }
 }
-
-

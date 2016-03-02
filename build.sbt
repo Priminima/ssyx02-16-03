@@ -26,6 +26,7 @@ libraryDependencies ++= {
     "org.apache.activemq" % "activemq-client"                     % "5.13.1",
     "org.json4s" %% "json4s-native"                               % "3.3.0",
     "org.json4s" %% "json4s-ext"                                  % "3.3.0",
+    "org.json4s" %% "json4s-jackson"                              % "3.3.0",
     "com.github.nscala-time" %% "nscala-time"                     % "1.8.0",
     "org.scalatest"     %% "scalatest"                            % scalaTestV % "test"
   )
