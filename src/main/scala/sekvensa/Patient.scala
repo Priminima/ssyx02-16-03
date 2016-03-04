@@ -29,7 +29,6 @@ class Patient extends Actor {
 
   //The state
   var theBus: Option[ActorRef] = None
-  //var currentState: List[sekvensa.service.ElvisPatient] = List()
 
   def receive = {
     case "connect" => {

@@ -32,7 +32,8 @@ class PatientsToElastic {
   /** Handles the initial parsing of incoming messages */
   def messageReceived(message: String) {
     println("************************* new message *************************") // very nice
-    println("time: "+getNow+ " message: "+ message)
+    println("TIME: "+getNow)
+    println("MESS: "+ message)
     // figure out what sort of message we just received
     val json:JValue = parse(message) // this jsons the String.
     val isa = json \ "isa"
@@ -47,15 +48,16 @@ class PatientsToElastic {
   }
 
   /** Instantiates a patient and sends it to ONGOING_PATIENT_INDEX
-    *
     * @param data patient to send to elastic
     */
   def postEntirePatientToElastic(data: JValue): Unit = {
-    val patient = initiatePatient(data \ "data" \"patient")
+    val patient = initiatePatient(data \ "data" \ "patient")
     addPatient(patient, ONGOING_PATIENT_INDEX) // index the new patient
   }
 
-  private def initiatePatient(patient: JValue): JValue ={
+  /**
+    */
+  private def initiatePatient(patient: JValue): JValue = {
     val events: List[Map[String, JValue]] = castJValueToList[Map[String, JValue]](patient \ "Events")
     val visitRegistrationTime = DateTime.parse((patient \ "VisitRegistrationTime").values.toString)
     val timeToDoctor = getTimeToEvent("Läkare", events, visitRegistrationTime)
@@ -64,12 +66,12 @@ class PatientsToElastic {
     patient merge
     (
       ("Priority" -> prio) ~
-      ("TimeToDoctor" -> timeToDoctor.toString) ~
-      ("TimeToTriage" -> timeToTriage.toString)
+      ("TimeToDoctor" -> timeToDoctor) ~
+      ("TimeToTriage" -> timeToTriage)
     )
   }
+
   /** Applies a diff to an OnGoingPatient.
-    *
     * The incoming diff is parsed and the CareContactId of the diff is extracted. the relevant patient is fetched from
     * the database using the CareContactId. The next iteration of the patient is generated from the diff and the old
     * patient. The new patient is then indexed into the database, overwriting the old version
@@ -100,6 +102,8 @@ class PatientsToElastic {
     addPatient(newPatient, ONGOING_PATIENT_INDEX)
   }
 
+  /** Casts a jValue to a List[A] without crashing on empty lists
+    */
   def castJValueToList[A](list:JValue): List[A] = {
     list match {
       case JNothing => List[A]()
@@ -107,6 +111,12 @@ class PatientsToElastic {
     }
   }
 
+  /** Assembles a patient as a JSON object.
+    * @param fieldData data from the text fields in Elvis and also Priority, TimeToDoctor and TimeToTriage
+    * @param events list of historical ElvisEvents
+    * @param updates list fo histrical ElvisUpdateEvents
+    * @return
+    */
   def elvisPatientFactory(fieldData: JValue, events: List[Map[String, JValue]], updates: List[ElvisUpdateEvent]): JValue = {
     val visitRegistrationTime = DateTime.parse((fieldData \ "VisitRegistrationTime").values.toString)
     val timeToDoctor = getTimeToEvent("Läkare", events, visitRegistrationTime)
@@ -116,8 +126,8 @@ class PatientsToElastic {
     fieldData merge
     (
       ("Priority" -> prio) ~
-      ("TimeToDoctor" -> timeToDoctor.toString) ~
-      ("TimeToTriage" -> timeToTriage.toString) ~
+      ("TimeToDoctor" -> timeToDoctor) ~
+      ("TimeToTriage" -> timeToTriage) ~
       ("Events" -> parse(write(events))) ~
       ("Updates" ->  parse(write(updates)))
     )
@@ -126,17 +136,19 @@ class PatientsToElastic {
   private def getTimeToEvent(eventTitle: String, events: List[Map[String, JValue]], visitRegistrationTime: DateTime): Long ={
     events.foreach(e =>
       if(e.get("Title").get.toString == eventTitle) { return {
-        println(DateTime.parse(e.get("Start").get.asInstanceOf[String]))
-        println(visitRegistrationTime)
-        try{
-          (visitRegistrationTime to DateTime.parse(e.get("Start").get.asInstanceOf[String])).toDurationMillis
-        }catch{
-          case e:IllegalAccessException  => -1
-          case e:Exception => -2
-        }
+        timeDifference(visitRegistrationTime,  DateTime.parse(e.get("Start").get.asInstanceOf[String]))
       }}
     )
-    -3
+    -1
+  }
+
+  private def timeDifference(fromTime: DateTime, toTime: DateTime): Long ={
+    try{
+      (fromTime to toTime).toDurationMillis
+    }catch{
+      case e:IllegalAccessException  => 0 // return 0 if time is negative
+      case e:Exception => -1 // usually illegal formatting
+    }
   }
 
   /** returns the priority event with the latest timestamp */
@@ -166,13 +178,10 @@ class PatientsToElastic {
       println("update recorded: " +k+ "->" +(newUpdates \ k).values)
       updatedVariables ++= List(
         read[ElvisUpdateEvent](write(Map( // ElvisUpdateEvent made from String made from Map
-          "CareContactId"-> patient \ "CareContactId",
-          "VisitId" -> patient\"VisitId",
-          "PatientId" -> patient\"PatientId",
           "Timestamp"-> (newUpdates\"timestamp").values, // please note timestamp vs Timestamp
-          "ModifiedField" -> k,                         // the key for the field that was changed...
-          "ModifiedTo" -> (newUpdates\k).values  // ...and the value it was changed to
-        )))).filter(k => !updatedVariables.contains(k)) // filter out any update that has already been recorded. This filter is called on a list that contains one element.
+          "ModifiedField" -> k,                          // the key for the field that was changed...
+          "ModifiedTo" -> (newUpdates\k).values          // ...and the value it was changed to
+        )))).filter(k => !updatedVariables.contains(k))  // filter out any update that has already been recorded. This filter is called on a list that contains one element.
     })
     updatedVariables
   }
@@ -191,8 +200,18 @@ class PatientsToElastic {
     */
   def removePatient(data: JValue) {
     val careContactId = (data \ "data" \ "patient"\ "CareContactId").values.toString
-    val patient = getPatientFromElastic(careContactId, ONGOING_PATIENT_INDEX)
-    val newPatient = patient merge parse(write("RemovedTime" -> getNow))
+    val patient = getPatientFromElastic(ONGOING_PATIENT_INDEX, careContactId)
+    val visitRegistrationTime = DateTime.parse((patient \ "VisitRegistrationTime").values.toString)
+
+    val now = getNow
+
+    val newPatient = patient merge parse(write
+      (
+        ("RemovedTime" -> getNow.toString) ~
+        ("TotalTime" -> timeDifference(visitRegistrationTime, getNow))
+      )
+    )
+
     // delete patient from ongoing and send to finished patients
     deletePatient(patient, ONGOING_PATIENT_INDEX)
     addPatient(newPatient, FINISHED_PATIENT_INDEX)
@@ -235,11 +254,11 @@ class PatientsToElastic {
     while (!oldPatientQuery.isCompleted) {} // patiently wait for response from the database. //TODO at some point add timeout. It could get stuck here forever (but probably not)
     val oldPatient:JValue = parse(oldPatientQuery.value.get.get) // unpack the string and cast to json-map
 
-    println("patient received: " +oldPatient \ "_source")
+    println("Retrieved patient: " +oldPatient \ "_source")
     return oldPatient \ "_source" // The good stuff is located in _source.
   }
 
-  def getNow = {
+  def getNow:DateTime = {
     DateTime.now(DateTimeZone.forID("Europe/Stockholm"))
   }
 }

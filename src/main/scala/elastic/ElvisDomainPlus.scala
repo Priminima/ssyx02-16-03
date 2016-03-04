@@ -3,6 +3,8 @@ package elastic
 import com.github.nscala_time.time.Imports._
 import org.json4s._
 
+//TODO clean up in here
+
 case class ElvisPatientPlus(
   CareContactId: BigInt,
   DepartmentComment: String,
@@ -39,9 +41,6 @@ case class ElvisEvent(
 
 /** Analogous for ElvisEvent, but for text field changes */
 case class ElvisUpdateEvent(
-  CareContactId: BigInt,
-  PatientId: BigInt,
-  VisitId: BigInt,
   Timestamp: DateTime ,
   ModifiedField: String,
   ModifiedTo : JValue
