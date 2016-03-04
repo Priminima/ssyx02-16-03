@@ -1,4 +1,4 @@
-## OnGoingPatients
+# OnGoingPatients
 This service keeps track of the patients currently in the emergency room and saves their data as they leave. It listens
 to topic `elvisDiff` and applies the diffs to the patients in an `elasticsearch`. This includes the raw data from the
 Elvis clients but also a few analysed fields, mainly time measurements.
@@ -9,7 +9,7 @@ Patients that are removed from Elvis are moved to `/finished_patients_index/pati
 
 To work it needs to be paired with a running instance of `Transformationservice`.
 
-# Startup sequence
+## Startup sequence
 Make sure `application.conf` is setup correctly. It needs to point to a proper `activemq` and `elasticsearch`.
 
 Now run `OnGoingPatients`. When it reports that it is connected to the bus, run `Transformationservice`. If it is
