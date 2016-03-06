@@ -3,7 +3,7 @@
 */**/application.conf
 target
 project
-
+application.conf
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
