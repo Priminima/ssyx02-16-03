@@ -55,7 +55,8 @@ class PatientsToElastic {
     addPatient(patient, ONGOING_PATIENT_INDEX) // index the new patient
   }
 
-  /**
+  /** This reformats a patient from the Transfomrationservice way of doing things to the OnGoingPatients way of doing things.
+    * This essentially means adding the "Priority", "TimeToDoctor" and "TimeToTriage" fields.
     */
   private def initiatePatient(patient: JValue): JValue = {
     val events: List[Map[String, JValue]] = castJValueToList[Map[String, JValue]](patient \ "Events")
@@ -102,8 +103,7 @@ class PatientsToElastic {
     addPatient(newPatient, ONGOING_PATIENT_INDEX)
   }
 
-  /** Casts a jValue to a List[A] without crashing on empty lists
-    */
+  /** Casts a jValue to a List[A] without crashing on empty lists */
   def castJValueToList[A](list:JValue): List[A] = {
     list match {
       case JNothing => List[A]()
@@ -133,6 +133,12 @@ class PatientsToElastic {
     )
   }
 
+  /** Calculates the time between "VisitRegistrationTime" and the first instance of and Event with a given title
+    * @param eventTitle the title of the event. examples are "Läkare" and "Triage".
+    * @param events the list of events
+    * @param visitRegistrationTime the time to compare the event to. This is usually "VisitRegistrationTime"
+    * @return the time between visitRegistrationTime and the event, in milliseconds.
+    */
   private def getTimeToEvent(eventTitle: String, events: List[Map[String, JValue]], visitRegistrationTime: DateTime): Long ={
     events.foreach(e =>
       if(e.get("Title").get.toString == eventTitle) { return {
@@ -142,6 +148,8 @@ class PatientsToElastic {
     -1
   }
 
+  /** calculates the elaspsed time between two DateTimes and returns it in milliseconds. If
+    * the time is negative it returns 0. If one of the time points is None, it returns -1. */
   private def timeDifference(fromTime: DateTime, toTime: DateTime): Long ={
     try{
       (fromTime to toTime).toDurationMillis
@@ -195,7 +203,6 @@ class PatientsToElastic {
   }
 
   /** Deletes a patient from ONGOING_PATIENT_INDEX and adds it to FINISHED_PATIENT_INDEX
-    *
     * @param data the patient to be removed (as a JSON)
     */
   def removePatient(data: JValue) {
@@ -218,7 +225,6 @@ class PatientsToElastic {
   }
 
   /** Attempts to delete a patient from elasticsearch under /targetIndex/PATIENT_TYPE/patient.CareContactId
-    *
     * @param patient the patient to be removed, in the ElvisPatientPlus format
     * @param targetIndex should ONLY be one of the values ONGOING_PATIENT_INDEX or FINISHED_PATIENT_INDEX
     */
@@ -233,7 +239,6 @@ class PatientsToElastic {
 
   /** Adds a patient to elasticsearch under /targetIndex/PATIENT_TYPE/patient.CareContactId
     * Note that this overwrites anything previously on that path
-    *
     * @param patient the patient to be added, in the ElvisPatientPlus format
     * @param targetIndex should ONLY be one of the values ONGOING_PATIENT_INDEX or FINISHED_PATIENT_INDEX
     */
@@ -248,7 +253,7 @@ class PatientsToElastic {
     )
   }
 
-  /** Fetches from elastic the patient under /index/PATIENT_TYPE/careContactId  */
+  /** Fetches from elastic the patient under /index/PATIENT_TYPE/careContactId */
   def getPatientFromElastic(index: String, careContactId: String): JValue ={
     val oldPatientQuery = client.get(index, PATIENT_TYPE, careContactId).map(_.getResponseBody) //fetch patient from database
     while (!oldPatientQuery.isCompleted) {} // patiently wait for response from the database. //TODO at some point add timeout. It could get stuck here forever (but probably not)
