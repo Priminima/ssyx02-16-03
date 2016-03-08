@@ -18,8 +18,8 @@ class PatientsToElastic {
   // active patients are stored in ONGOING_PATIENT_INDEX/PATIENT_TYPE/CareContactId
   // removed patients are stored in FINISHED_PATIENT_INDEX/PATIENT_TYPE/CareContactId
   val PATIENT_TYPE = "patient_type"
-  val ONGOING_PATIENT_INDEX= "on_going_patient_index"
-  val FINISHED_PATIENT_INDEX = "finished_patient_index" // patients go here when they are removed
+  val ONGOING_PATIENT_INDEX= "old_patients"
+  val FINISHED_PATIENT_INDEX = "old_patients2" // patients go here when they are removed
 
   // load configs from resources/application.conf
   val config = ConfigFactory.load()
@@ -39,19 +39,22 @@ class PatientsToElastic {
     val isa = json \ "isa"
     println("isa: " + isa)
 
+    postEntirePatientToElastic(json)
+    /*
     isa match {
       case JString("newLoad") | JString("new") => postEntirePatientToElastic(json)
       case JString("diff")                     => diffPatient(json)
       case JString("removed")                  => removePatient(json)
       case _ => println("WARNING: Searcher received an unrecognized message format. isa:"+isa)
     }
+    */
   }
 
   /** Instantiates a patient and sends it to ONGOING_PATIENT_INDEX
     * @param data patient to send to elastic
     */
   def postEntirePatientToElastic(data: JValue): Unit = {
-    val patient = initiatePatient(data \ "data" \ "patient")
+    val patient = initiatePatient(data)
     addPatient(patient, ONGOING_PATIENT_INDEX) // index the new patient
   }
 
@@ -59,17 +62,41 @@ class PatientsToElastic {
     * This essentially means adding the "Priority", "TimeToDoctor" and "TimeToTriage" fields.
     */
   private def initiatePatient(patient: JValue): JValue = {
-    val events: List[Map[String, JValue]] = castJValueToList[Map[String, JValue]](patient \ "Events")
-    val visitRegistrationTime = DateTime.parse((patient \ "VisitRegistrationTime").values.toString)
+    val events: List[Map[String, JValue]] = castJValueToList[Map[String, JValue]](patient \ "events")
+    val visitRegistrationTime = DateTime.parse((patient \"initial"\ "VisitRegistrationTime").values.toString)
     val timeToDoctor = getTimeToEvent("Läkare", events, visitRegistrationTime)
     val timeToTriage = getTimeToEvent("Triage", events, visitRegistrationTime)
     val prio = getPriority(events)
-    patient merge
+
+    val complete= DateTime.parse((patient \ "complete").values.toString)
+
+    val newPatient = patient merge
     (
       ("Priority" -> prio) ~
       ("TimeToDoctor" -> timeToDoctor) ~
-      ("TimeToTriage" -> timeToTriage)
+      ("TimeToTriage" -> timeToTriage) ~
+      ("RemovedTime" -> complete.toString) ~
+      ("TotalTime" -> timeDifference(visitRegistrationTime, complete))
     )
+
+    return newPatient filterField{
+      case JField("totalTime",_) => false
+      case JField("timeToDoctor", _) => false
+      case JField("lisaID",_) => false
+      case JField("initial",_) => false
+      case JField("location",_) => false
+      case _ => true
+    }
+
+
+
+    /*return patientMerge filterField {
+      case JField("totalTime",_) => false
+      case JField("timeToDoctor", _) => false
+      case JField("lisaID",_) => false
+      case _ => true
+    }*/
+
   }
 
   /** Applies a diff to an OnGoingPatient.
@@ -141,8 +168,8 @@ class PatientsToElastic {
     */
   private def getTimeToEvent(eventTitle: String, events: List[Map[String, JValue]], visitRegistrationTime: DateTime): Long ={
     events.foreach(e =>
-      if(e.get("Title").get.toString == eventTitle) { return {
-        timeDifference(visitRegistrationTime,  DateTime.parse(e.get("Start").get.asInstanceOf[String]))
+      if(e.get("event").get.toString == eventTitle) { return {
+        timeDifference(visitRegistrationTime,  DateTime.parse(e.get("timestamp").get.asInstanceOf[String]))
       }}
     )
     -1
@@ -165,10 +192,10 @@ class PatientsToElastic {
     var timestamp = DateTime.parse("0000-01-24T00:00:00Z")
     var prio:String = ""
     events.foreach( e => //TODO fix
-      if(prios.contains(e.get("Title").get.asInstanceOf[String])){
-        if (DateTime.parse(e.get("Start").get.asInstanceOf[String]).compareTo(timestamp) > 0) {
-          timestamp = DateTime.parse(e.get("Start").get.asInstanceOf[String])
-          prio = e.get("Title").get.toString
+      if(prios.contains(e.get("event").get.asInstanceOf[String])){
+        if (DateTime.parse(e.get("timestamp").get.asInstanceOf[String]).compareTo(timestamp) > 0) {
+          timestamp = DateTime.parse(e.get("timestamp").get.asInstanceOf[String])
+          prio = e.get("event").get.toString
         }
       }
     )

@@ -25,6 +25,7 @@ class Patient extends Actor {
   val readFrom = config.getString("sp.simpleservice.readFromTopic")
   val writeTo = config.getString("sp.simpleservice.writeToTopic")
 
+
   val patientsToElastic = new PatientsToElastic
 
   //The state
