@@ -60,9 +60,9 @@ class PatientsToElastic {
     */
   private def initiatePatient(patient: JValue): JValue = {
     val events: List[Map[String, JValue]] = castJValueToList[Map[String, JValue]](patient \ "Events")
-    val visitRegistrationTime = DateTime.parse((patient \ "VisitRegistrationTime").values.toString)
-    val timeToDoctor = getTimeToEvent("Läkare", events, visitRegistrationTime)
-    val timeToTriage = getTimeToEvent("Triage", events, visitRegistrationTime)
+    val careContactRegistrationTime = DateTime.parse((patient \ "CareContactRegistrationTime").values.toString)
+    val timeToDoctor = getTimeToEvent("Läkare", events, careContactRegistrationTime)
+    val timeToTriage = getTimeToEvent("Triage", events, careContactRegistrationTime)
     val prio = getPriority(events)
     patient merge
     (
@@ -101,6 +101,8 @@ class PatientsToElastic {
     // rebuild the patient and send to elastic
     val newPatient = elvisPatientFactory(fieldData, events, updates)
     addPatient(newPatient, ONGOING_PATIENT_INDEX)
+    
+
   }
 
   /** Casts a jValue to a List[A] without crashing on empty lists */
@@ -118,9 +120,9 @@ class PatientsToElastic {
     * @return
     */
   def elvisPatientFactory(fieldData: JValue, events: List[Map[String, JValue]], updates: List[ElvisUpdateEvent]): JValue = {
-    val visitRegistrationTime = DateTime.parse((fieldData \ "VisitRegistrationTime").values.toString)
-    val timeToDoctor = getTimeToEvent("Läkare", events, visitRegistrationTime)
-    val timeToTriage = getTimeToEvent("Triage", events, visitRegistrationTime)
+    val careContactRegistrationTime = DateTime.parse((fieldData \ "CareContactRegistrationTime").values.toString)
+    val timeToDoctor = getTimeToEvent("Läkare", events, careContactRegistrationTime)
+    val timeToTriage = getTimeToEvent("Triage", events, careContactRegistrationTime)
     val prio = getPriority(events)
 
     fieldData merge
@@ -133,22 +135,22 @@ class PatientsToElastic {
     )
   }
 
-  /** Calculates the time between "VisitRegistrationTime" and the first instance of and Event with a given title
+  /** Calculates the time between "CareContactRegistrationTime" and the first instance of and Event with a given title
     * @param eventTitle the title of the event. examples are "Läkare" and "Triage".
     * @param events the list of events
-    * @param visitRegistrationTime the time to compare the event to. This is usually "VisitRegistrationTime"
+    * @param careContactRegistrationTime the time to compare the event to. This is usually "CareContactRegistrationTime"
     * @return the time between visitRegistrationTime and the event, in milliseconds.
     */
-  private def getTimeToEvent(eventTitle: String, events: List[Map[String, JValue]], visitRegistrationTime: DateTime): Long ={
+  private def getTimeToEvent(eventTitle: String, events: List[Map[String, JValue]], careContactRegistrationTime: DateTime): Long ={
     events.foreach(e =>
       if(e.get("Title").get.toString == eventTitle) { return {
-        timeDifference(visitRegistrationTime,  DateTime.parse(e.get("Start").get.asInstanceOf[String]))
+        timeDifference(careContactRegistrationTime,  DateTime.parse(e.get("Start").get.asInstanceOf[String]))
       }}
     )
     -1
   }
 
-  /** calculates the elaspsed time between two DateTimes and returns it in milliseconds. If
+  /** calculates the elapsed time between two DateTimes and returns it in milliseconds. If
     * the time is negative it returns 0. If one of the time points is None, it returns -1. */
   private def timeDifference(fromTime: DateTime, toTime: DateTime): Long ={
     try{
@@ -208,7 +210,7 @@ class PatientsToElastic {
   def removePatient(data: JValue) {
     val careContactId = (data \ "data" \ "patient"\ "CareContactId").values.toString
     val patient = getPatientFromElastic(ONGOING_PATIENT_INDEX, careContactId)
-    val visitRegistrationTime = DateTime.parse((patient \ "VisitRegistrationTime").values.toString)
+    val visitRegistrationTime = DateTime.parse((patient \ "CareContactRegistrationTime").values.toString)
 
     val now = getNow
 
@@ -243,7 +245,7 @@ class PatientsToElastic {
     * @param targetIndex should ONLY be one of the values ONGOING_PATIENT_INDEX or FINISHED_PATIENT_INDEX
     */
   def addPatient(patient : JValue, targetIndex: String): Unit = {
-    val careContactId:String = (patient \ "CareContactId").values.toString
+    val careContactId:String = (patient \"CareContactId").values.toString
     client.index(
       index = targetIndex,
       `type` = PATIENT_TYPE,
