@@ -43,7 +43,9 @@ case class ElvisEvent(
 case class ElvisUpdateEvent(
   Timestamp: DateTime ,
   ModifiedField: String,
-  ModifiedTo : JValue
+  ModifiedTo : JValue,
+  CareContactId: BigInt,
+  ModifiedFrom: JValue
 )
 
 case class ElvisPatientDiff(updates: Map[String, JValue], newEvents: List[ElvisEvent], removedEvents: List[ElvisEvent])

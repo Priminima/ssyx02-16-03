@@ -190,7 +190,9 @@ class PatientsToElastic {
         read[ElvisUpdateEvent](write(Map( // ElvisUpdateEvent made from String made from Map
           "Timestamp"-> (newUpdates\"timestamp").values, // please note timestamp vs Timestamp
           "ModifiedField" -> k,                          // the key for the field that was changed...
-          "ModifiedTo" -> (newUpdates\k).values          // ...and the value it was changed to
+          "ModifiedTo" -> (newUpdates\k).values,         // ...and the value it was changed to
+          "CareContactId" -> patient\"CareContactId",
+          "ModifiedFrom" -> patient\k
         )))).filter(k => !updatedVariables.contains(k))  // filter out any update that has already been recorded. This filter is called on a list that contains one element.
     })
     updatedVariables
