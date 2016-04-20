@@ -56,19 +56,29 @@ class PatientsToElastic {
   }
 
   /** This reformats a patient from the Transfomrationservice way of doing things to the OnGoingPatients way of doing things.
-    * This essentially means adding the "Priority", "TimeToDoctor" and "TimeToTriage" fields.
+    * This essentially means adding a bunch of fields.
     */
   private def initiatePatient(patient: JValue): JValue = {
     val events: List[Map[String, JValue]] = castJValueToList[Map[String, JValue]](patient \ "Events")
     val careContactRegistrationTime = DateTime.parse((patient \ "CareContactRegistrationTime").values.toString)
-    val timeToDoctor = getTimeToEvent("Läkare", events, careContactRegistrationTime)
-    val timeToTriage = getTimeToEvent("Triage", events, careContactRegistrationTime)
+
+    val timeOfDoctor = getTimeOfEvent("Läkare", events, careContactRegistrationTime)
+    val timeOfTriage = getTimeOfEvent("Triage", events, careContactRegistrationTime)
+    val timeOfFinished = getTimeOfEvent("Klar", events, careContactRegistrationTime)
+
+    val timeToDoctor = timeDifference(careContactRegistrationTime,  timeOfDoctor)
+    val timeToTriage = timeDifference(careContactRegistrationTime,  timeOfTriage)
+    val timeToFinished = timeDifference(careContactRegistrationTime,  timeOfFinished)
     val prio = getPriority(events)
     patient merge
     (
       ("Priority" -> prio) ~
       ("TimeToDoctor" -> timeToDoctor) ~
-      ("TimeToTriage" -> timeToTriage)
+      ("TimeToTriage" -> timeToTriage) ~
+      ("TimeToFinished" -> timeToFinished) ~
+      ("TimeOfDoctor" -> timeOfDoctor.toString()) ~
+      ("TimeOfTriage" -> timeOfTriage.toString()) ~
+      ("TimeOfFinished" -> timeOfFinished.toString())
     )
   }
 
@@ -116,13 +126,20 @@ class PatientsToElastic {
   /** Assembles a patient as a JSON object.
     * @param fieldData data from the text fields in Elvis and also Priority, TimeToDoctor and TimeToTriage
     * @param events list of historical ElvisEvents
-    * @param updates list fo histrical ElvisUpdateEvents
+    * @param updates list fo historical ElvisUpdateEvents
     * @return
     */
   def elvisPatientFactory(fieldData: JValue, events: List[Map[String, JValue]], updates: List[ElvisUpdateEvent]): JValue = {
     val careContactRegistrationTime = DateTime.parse((fieldData \ "CareContactRegistrationTime").values.toString)
-    val timeToDoctor = getTimeToEvent("Läkare", events, careContactRegistrationTime)
-    val timeToTriage = getTimeToEvent("Triage", events, careContactRegistrationTime)
+
+
+    val timeOfDoctor = getTimeOfEvent("Läkare", events, careContactRegistrationTime)
+    val timeOfTriage = getTimeOfEvent("Triage", events, careContactRegistrationTime)
+    val timeOfFinished = getTimeOfEvent("Klar", events, careContactRegistrationTime)
+
+    val timeToDoctor = timeDifference(careContactRegistrationTime,  timeOfDoctor)
+    val timeToTriage = timeDifference(careContactRegistrationTime,  timeOfTriage)
+    val timeToFinished = timeDifference(careContactRegistrationTime,  timeOfFinished)
     val prio = getPriority(events)
 
     fieldData merge
@@ -130,6 +147,10 @@ class PatientsToElastic {
       ("Priority" -> prio) ~
       ("TimeToDoctor" -> timeToDoctor) ~
       ("TimeToTriage" -> timeToTriage) ~
+      ("TimeToFinished" -> timeToFinished) ~
+      ("TimeOfDoctor" -> timeOfDoctor.toString()) ~
+      ("TimeOfTriage" -> timeOfTriage.toString()) ~
+      ("TimeOfFinished" -> timeOfFinished.toString()) ~
       ("Events" -> parse(write(events))) ~
       ("Updates" ->  parse(write(updates)))
     )
@@ -141,13 +162,13 @@ class PatientsToElastic {
     * @param careContactRegistrationTime the time to compare the event to. This is usually "CareContactRegistrationTime"
     * @return the time between visitRegistrationTime and the event, in milliseconds.
     */
-  private def getTimeToEvent(eventTitle: String, events: List[Map[String, JValue]], careContactRegistrationTime: DateTime): Long ={
+  private def getTimeOfEvent(eventTitle: String, events: List[Map[String, JValue]], careContactRegistrationTime: DateTime): DateTime ={
     events.foreach(e =>
       if(e.get("Title").get.toString == eventTitle) { return {
-        timeDifference(careContactRegistrationTime,  DateTime.parse(e.get("Start").get.asInstanceOf[String]))
+        DateTime.parse(e.get("Start").get.asInstanceOf[String])
       }}
     )
-    -1
+    DateTime.parse("0000-01-24T00:00:00Z")
   }
 
   /** calculates the elapsed time between two DateTimes and returns it in milliseconds. If
@@ -166,7 +187,7 @@ class PatientsToElastic {
   private def getPriority(events: List[Map[String, JValue]]): String ={
     var timestamp = DateTime.parse("0000-01-24T00:00:00Z")
     var prio:String = ""
-    events.foreach( e => //TODO fix
+    events.foreach( e =>
       if(prios.contains(e.get("Title").get.asInstanceOf[String])){
         if (DateTime.parse(e.get("Start").get.asInstanceOf[String]).compareTo(timestamp) > 0) {
           timestamp = DateTime.parse(e.get("Start").get.asInstanceOf[String])
@@ -260,7 +281,7 @@ class PatientsToElastic {
   /** Fetches from elastic the patient under /index/PATIENT_TYPE/careContactId */
   def getPatientFromElastic(index: String, careContactId: String): JValue ={
     val oldPatientQuery = client.get(index, PATIENT_TYPE, careContactId).map(_.getResponseBody) //fetch patient from database
-    while (!oldPatientQuery.isCompleted) {} // patiently wait for response from the database. //TODO at some point add timeout. It could get stuck here forever (but probably not)
+    while (!oldPatientQuery.isCompleted) {} // patiently wait for response from the database. //TODO at some point add timeout. It could get stuck here forever (but probably not). Update: it has not happened for 60 days
     val oldPatient:JValue = parse(oldPatientQuery.value.get.get) // unpack the string and cast to json-map
 
     println("Retrieved patient: " +oldPatient \ "_source")

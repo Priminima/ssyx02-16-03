@@ -17,8 +17,12 @@ case class ElvisPatientPlus(
   VisitRegistrationTime: DateTime,
   // These are not included in data sent by TransformationService so they are initialized here
   RemovedTime: Option[DateTime],
+  TriageTime: Option[DateTime],
+  DoctorTime: Option[DateTime],
+  FinishedTime: Option[DateTime],
   TimeToDoctor: BigInt = -1,
   TimeToTriage: BigInt = -1,
+  TimeToFinished: BigInt = -1,
   TotalTime:    BigInt = -1,
   Priority: String = "",
 
